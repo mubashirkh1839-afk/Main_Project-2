@@ -3,34 +3,72 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  // 1. Initial State: direct localStorage se load karo
   const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem('food_rescue_user');
-    return savedUser ? JSON.parse(savedUser) : null;
+    try {
+      const savedUser = localStorage.getItem('food_rescue_user');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+      return null;
+    }
   });
 
-  // 2. Login Function: User profile + localStorage sync
-  const loginWithOtp = (userData) => {
-    const userPayload = userData || {
-      name: 'Mubashir Ahmad',
-      role: 'Volunteer',
-      phone: '+919876543210'
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [selectedRole, setSelectedRole] = useState('Volunteer');
+
+  const login = (userData) => {
+    const userPayload = {
+      id: userData?.id || 'usr_' + Date.now(),
+      name: userData?.fullName || userData?.name || 'Mubashir Ahmad',
+      role: userData?.role || selectedRole || 'Volunteer',
+      phone: userData?.phone || '+919876543210',
+      email: userData?.email || 'user@foodrescue.org',
+      orgName: userData?.orgName || '',
+      city: userData?.city || 'Kanpur',
+      stats: {
+        mealsRescued: userData?.stats?.mealsRescued || 45,
+        totalWeightKg: userData?.stats?.totalWeightKg || 68,
+        carbonSavedKg: userData?.stats?.carbonSavedKg || 112,
+      },
     };
     setUser(userPayload);
     localStorage.setItem('food_rescue_user', JSON.stringify(userPayload));
   };
 
-  // 3. Logout Function: Clear state & localStorage
   const logout = () => {
     setUser(null);
     localStorage.removeItem('food_rescue_user');
   };
 
+  const setRole = (role) => {
+    setSelectedRole(role);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loginWithOtp, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        login,
+        loginWithOtp: login,
+        logout,
+        setRole,
+        selectedRole,
+        setSelectedRole,
+        isLoginModalOpen,
+        setIsLoginModalOpen,
+        isRoleModalOpen,
+        setIsRoleModalOpen,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
