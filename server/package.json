@@ -1,0 +1,22 @@
+{
+  "name": "food-rescue-server",
+  "version": "1.0.0",
+  "description": "Backend API and Real-time Logistics Engine for Food Rescue Platform",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "keywords": ["food-rescue", "express", "socket.io", "geospatial", "esg"],
+  "author": "Mubashir",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.3",
+    "socket.io": "^4.8.1"
+  }
+}

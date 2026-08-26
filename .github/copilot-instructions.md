@@ -1,0 +1,4 @@
+- Use Express.js with async/await for all backend routes.
+- Separate controllers, routes, and database models into distinct folders.
+- Always include try-catch blocks and standardized HTTP status codes (200, 400, 500).
+- Use modular imports.
