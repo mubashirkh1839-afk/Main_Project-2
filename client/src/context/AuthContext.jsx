@@ -22,6 +22,7 @@ export const AuthProvider = ({ children }) => {
       name: userData?.fullName || userData?.name || 'Mubashir Ahmad',
       role: userData?.role || selectedRole || 'Volunteer',
       phone: userData?.phone || '+919876543210',
+      token: userData?.token || '',
       email: userData?.email || 'user@foodrescue.org',
       orgName: userData?.orgName || '',
       city: userData?.city || 'Kanpur',

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { X, ShieldCheck, Phone, User, Building2, MapPin, Mail, Sparkles, CheckCircle2 } from 'lucide-react';
+import { sendOtp, verifyOtp } from '../api';
 
 function LoginModal({ isOpen, onClose, onLoginSuccess }) {
   const { isLoginModalOpen, setIsLoginModalOpen, selectedRole, login } = useAuth();
@@ -19,6 +20,7 @@ function LoginModal({ isOpen, onClose, onLoginSuccess }) {
   });
 
   const [otpSent, setOtpSent] = useState(false);
+  const [devOtp, setDevOtp] = useState('1234');
 
   useEffect(() => {
     if (selectedRole) {
@@ -32,37 +34,47 @@ function LoginModal({ isOpen, onClose, onLoginSuccess }) {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSendOtp = (e) => {
+  const handleSendOtp = async (e) => {
     e.preventDefault();
     if (formData.phone.length === 10 && formData.fullName) {
-      setOtpSent(true);
+      try {
+        const response = await sendOtp(formData.phone);
+        setDevOtp(response.devOtp || '');
+        setOtpSent(true);
+      } catch (error) {
+        alert(error.message);
+      }
     } else {
       alert('Please enter your Full Name and 10-digit Mobile Number.');
     }
   };
 
-  const handleFinalSubmit = (e) => {
+  const handleFinalSubmit = async (e) => {
     e.preventDefault();
     if (formData.otp.length === 4) {
-      const userPayload = {
-        name: formData.fullName,
-        role: formData.role,
-        phone: '+91' + formData.phone,
-        email: formData.email || 'contact@foodrescue.org',
-        orgName: formData.orgName,
-        city: formData.city,
-        address: formData.address,
-      };
+      try {
+        const response = await verifyOtp({
+          phone: formData.phone,
+          otp: formData.otp,
+          name: formData.fullName,
+          role: formData.role,
+          orgName: formData.orgName,
+          city: formData.city,
+        });
+        const userPayload = { ...response.user, token: response.token, address: formData.address, email: formData.email };
 
-      if (onLoginSuccess) {
-        onLoginSuccess(formData.phone, formData.role, userPayload);
-      } else {
+        if (onLoginSuccess) {
+          onLoginSuccess(formData.phone, formData.role, userPayload);
+        }
         login(userPayload);
+        setDevOtp('1234');
+        setOtpSent(false);
+        handleClose();
+      } catch (error) {
+        alert(error.message);
       }
-      setOtpSent(false);
-      handleClose();
     } else {
-      alert('Please enter the 4-digit verification OTP (Demo OTP: 1234)');
+      alert(`Please enter the 4-digit verification OTP${devOtp ? ` (Demo OTP: ${devOtp})` : ''}`);
     }
   };
 
@@ -279,7 +291,7 @@ function LoginModal({ isOpen, onClose, onLoginSuccess }) {
               />
               <div className="flex items-center justify-center gap-1.5 mt-2 text-xs text-slate-500">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Demo OTP: <strong className="text-emerald-700 font-bold">1234</strong></span>
+                <span>{devOtp ? <>Demo OTP: <strong className="text-emerald-700 font-bold">{devOtp}</strong></> : 'Check your configured SMS provider for the OTP.'}</span>
               </div>
             </div>
 

@@ -9,6 +9,7 @@ import LoginModal from '../components/LoginModal';
 import DonorDashboard from '../components/DonorDashboard';
 import VolunteerDashboard from '../components/VolunteerDashboard';
 import MapView from '../components/MapView';
+import { createFoodListing, getFoodListings, reserveFoodListing } from '../api';
 import { 
   Utensils, 
   MapPin, 
@@ -123,6 +124,22 @@ const Home = () => {
   const { user, setIsRoleModalOpen, setIsLoginModalOpen } = useAuth();
   const [foodItems, setFoodItems] = useState(INITIAL_FOOD_ITEMS);
 
+  const normalizeFoodItem = (item) => ({
+    ...item,
+    coords: item.coords || [item.lat, item.lng],
+    quantity: item.quantity || `${item.servings || 0} Servings`,
+    expiry: item.expiry || `Expires in ${item.expiryHours || 0} hours`,
+    imageUrl: item.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80',
+  });
+
+  useEffect(() => {
+    getFoodListings()
+      .then((response) => setFoodItems(response.data.map(normalizeFoodItem)))
+      .catch(() => {
+        // Keep demo listings visible while the backend is unavailable.
+      });
+  }, []);
+
   // Modals State
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
   const [isESGModalOpen, setIsESGModalOpen] = useState(false);
@@ -156,8 +173,30 @@ const Home = () => {
   }, []);
 
   // Post Food Handler
-  const handleAddFood = (newItem) => {
-    setFoodItems([newItem, ...foodItems]);
+  const handleAddFood = async (newItem) => {
+    if (!user?.token) {
+      alert('Please sign in as a Donor before posting food.');
+      return;
+    }
+    try {
+      const response = await createFoodListing({
+        title: newItem.title,
+        type: newItem.type,
+        category: newItem.category,
+        servings: newItem.servings,
+        weightKg: newItem.weightKg,
+        location: newItem.location,
+        landmark: newItem.landmark,
+        lat: newItem.coords?.[0],
+        lng: newItem.coords?.[1],
+        expiryHours: newItem.expiryHours,
+        packagingStatus: newItem.packagingStatus,
+        imageUrl: newItem.imageUrl,
+      }, user.token);
+      setFoodItems((prev) => [normalizeFoodItem(response.data), ...prev]);
+    } catch (error) {
+      alert(error.message);
+    }
     setActiveTab('feed');
   };
 
@@ -170,18 +209,29 @@ const Home = () => {
     setSelectedFoodForClaim(item);
   };
 
-  const handleConfirmClaim = (foodId, claimDetails) => {
-    setFoodItems((prev) =>
-      prev.map((item) =>
-        item.id === foodId
-          ? {
-              ...item,
-              status: 'Claimed',
-              claimedBy: `${user?.name || 'Volunteer'} (${claimDetails.notes})`,
-            }
-          : item
-      )
-    );
+  const handleConfirmClaim = async (foodId, claimDetails) => {
+    if (!user?.token) {
+      alert('Please sign in before claiming food.');
+      return;
+    }
+    try {
+      const response = await reserveFoodListing({
+        foodListingId: foodId,
+        vehicle: claimDetails.vehicle,
+        eta: claimDetails.eta,
+        notes: claimDetails.notes,
+      }, user.token);
+      const claimedItem = response.claim?.foodListingId === foodId;
+      setFoodItems((prev) =>
+        prev.map((item) => item.id === foodId ? {
+          ...item,
+          status: claimedItem ? 'Claimed' : 'Claimed',
+          claimedBy: `${user.name || 'Volunteer'} (ETA: ${claimDetails.eta})`,
+        } : item)
+      );
+    } catch (error) {
+      alert(error.message);
+    }
   };
 
   // 2-Tier OTP Handlers
