@@ -13,9 +13,13 @@
 
 import express from 'express';
 import jwt from 'jsonwebtoken';
-import { users, otpStore, generateId, generateOtp } from '../db.js';
+import twilio from 'twilio';
+import { User, otpStore, generateId, generateOtp } from '../db.js';
 
 const router = express.Router();
+const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
+  ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+  : null;
 
 // ─── MIDDLEWARE: Verify JWT Token ─────────────────────────────────────────────
 export const verifyToken = (req, res, next) => {
@@ -36,8 +40,8 @@ export const verifyToken = (req, res, next) => {
 };
 
 // ─── POST /api/auth/send-otp ──────────────────────────────────────────────────
-// Generates a 4-digit OTP and "sends" it (simulated for now, Twilio in production)
-router.post('/send-otp', (req, res) => {
+// Generates a 4-digit OTP and sends it through Twilio when configured.
+router.post('/send-otp', async (req, res) => {
   const { phone } = req.body;
 
   if (!phone || phone.length < 10) {
@@ -48,10 +52,24 @@ router.post('/send-otp', (req, res) => {
   const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes expiry
 
   // Store OTP against phone number
-  otpStore[phone] = { otp, expiresAt };
+  otpStore.set(phone, { otp, expiresAt });
 
-  // In PRODUCTION → Replace with: twilio.messages.create({ to: phone, body: `Your FoodRescue OTP: ${otp}` })
-  console.log(`📱 [OTP SENT] Phone: ${phone} → OTP: ${otp} (expires in 5 mins)`);
+  if (twilioClient && process.env.TWILIO_PHONE_NUMBER) {
+    try {
+      await twilioClient.messages.create({
+        body: `Your FoodRescue OTP is ${otp}. It expires in 5 minutes.`,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: phone.startsWith('+') ? phone : `+91${phone}`,
+      });
+      console.log(`📱 [OTP SENT VIA TWILIO] Phone: ${phone}`);
+    } catch (error) {
+      otpStore.delete(phone);
+      console.error('Twilio OTP delivery failed:', error.message);
+      return res.status(500).json({ success: false, message: 'Unable to send OTP right now.' });
+    }
+  } else {
+    console.log(`📱 [DEV OTP] Phone: ${phone} → OTP: ${otp} (expires in 5 mins)`);
+  }
 
   return res.json({
     success: true,
@@ -63,21 +81,21 @@ router.post('/send-otp', (req, res) => {
 
 // ─── POST /api/auth/verify-otp ────────────────────────────────────────────────
 // Validates the OTP, creates/retrieves user, returns JWT
-router.post('/verify-otp', (req, res) => {
+router.post('/verify-otp', async (req, res) => {
   const { phone, otp, name, role, orgName, city } = req.body;
 
   if (!phone || !otp) {
     return res.status(400).json({ success: false, message: 'Phone and OTP are required.' });
   }
 
-  const record = otpStore[phone];
+  const record = otpStore.get(phone);
 
   // OTP not found or expired
   if (!record) {
     return res.status(400).json({ success: false, message: 'OTP not found. Please request a new one.' });
   }
   if (Date.now() > record.expiresAt) {
-    delete otpStore[phone];
+    otpStore.delete(phone);
     return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new one.' });
   }
   if (record.otp !== otp) {
@@ -85,10 +103,10 @@ router.post('/verify-otp', (req, res) => {
   }
 
   // OTP is valid — clean up
-  delete otpStore[phone];
+  otpStore.delete(phone);
 
   // Find existing user or create new one
-  let user = users.find((u) => u.phone === phone);
+  let user = await User.findOne({ phone }).lean();
   if (!user) {
     user = {
       id: generateId('u'),
@@ -102,7 +120,7 @@ router.post('/verify-otp', (req, res) => {
       totalDeliveries: 0,
       createdAt: new Date().toISOString(),
     };
-    users.push(user);
+    await User.create(user);
     console.log(`✅ [NEW USER] Registered: ${user.name} as ${user.role}`);
   }
 
@@ -131,8 +149,8 @@ router.post('/verify-otp', (req, res) => {
 
 // ─── GET /api/auth/me ─────────────────────────────────────────────────────────
 // Returns authenticated user's full profile
-router.get('/me', verifyToken, (req, res) => {
-  const user = users.find((u) => u.id === req.user.id);
+router.get('/me', verifyToken, async (req, res) => {
+  const user = await User.findOne({ id: req.user.id }).lean();
 
   if (!user) {
     return res.status(404).json({ success: false, message: 'User not found.' });

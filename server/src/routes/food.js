@@ -14,7 +14,7 @@
  */
 
 import express from 'express';
-import { foodListings, generateId, generateOtp } from '../db.js';
+import { FoodListing, generateId, generateOtp } from '../db.js';
 import { verifyToken } from './auth.js';
 
 const router = express.Router();
@@ -36,10 +36,10 @@ const getDistanceKm = (lat1, lng1, lat2, lng2) => {
 
 // ─── GET /api/food/nearby?lat=...&lng=...&radius=10&type=All ──────────────────
 // Returns listings sorted by urgency within the specified radius
-router.get('/nearby', (req, res) => {
+router.get('/nearby', async (req, res) => {
   const { lat, lng, radius = 10, type = 'All' } = req.query;
 
-  let results = foodListings.filter((item) => item.status === 'Available');
+  let results = await FoodListing.find({ status: 'Available' }).lean();
 
   // If lat/lng provided, filter by proximity
   if (lat && lng) {
@@ -67,24 +67,17 @@ router.get('/nearby', (req, res) => {
 
 // ─── GET /api/food ────────────────────────────────────────────────────────────
 // Get all food listings (for map display, includes claimed/delivered)
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const { status } = req.query;
-  let results = [...foodListings];
-
-  if (status) {
-    results = results.filter((item) => item.status === status);
-  }
-
-  // Sort by creation time, newest first
-  results.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  let results = await FoodListing.find(status ? { status } : {}).sort({ createdAt: -1 }).lean();
 
   return res.json({ success: true, count: results.length, data: results });
 });
 
 // ─── GET /api/food/:id ────────────────────────────────────────────────────────
 // Get details of a specific food listing
-router.get('/:id', (req, res) => {
-  const item = foodListings.find((f) => f.id === req.params.id);
+router.get('/:id', async (req, res) => {
+  const item = await FoodListing.findOne({ id: req.params.id }).lean();
 
   if (!item) {
     return res.status(404).json({ success: false, message: 'Food listing not found.' });
@@ -95,7 +88,7 @@ router.get('/:id', (req, res) => {
 
 // ─── POST /api/food ───────────────────────────────────────────────────────────
 // Create a new surplus food listing (Donor only)
-router.post('/', verifyToken, (req, res) => {
+router.post('/', verifyToken, async (req, res) => {
   if (req.user.role !== 'Donor') {
     return res.status(403).json({ success: false, message: 'Only Donors can post food listings.' });
   }
@@ -136,7 +129,7 @@ router.post('/', verifyToken, (req, res) => {
     createdAt: new Date().toISOString(),
   };
 
-  foodListings.push(newListing);
+  await FoodListing.create(newListing);
 
   console.log(`🍲 [NEW LISTING] "${newListing.title}" by Donor ${req.user.id} — Pickup OTP: ${newListing.pickupOtp}`);
 
@@ -149,18 +142,19 @@ router.post('/', verifyToken, (req, res) => {
 
 // ─── PATCH /api/food/:id/delist ───────────────────────────────────────────────
 // Manually delist a food listing
-router.patch('/:id/delist', verifyToken, (req, res) => {
-  const idx = foodListings.findIndex((f) => f.id === req.params.id);
+router.patch('/:id/delist', verifyToken, async (req, res) => {
+  const listing = await FoodListing.findOne({ id: req.params.id });
 
-  if (idx === -1) {
+  if (!listing) {
     return res.status(404).json({ success: false, message: 'Listing not found.' });
   }
-  if (foodListings[idx].donorId !== req.user.id) {
+  if (listing.donorId !== req.user.id) {
     return res.status(403).json({ success: false, message: 'You can only delist your own listings.' });
   }
 
-  foodListings[idx].status = 'Delisted';
-  return res.json({ success: true, message: 'Listing delisted.', data: foodListings[idx] });
+  listing.status = 'Delisted';
+  await listing.save();
+  return res.json({ success: true, message: 'Listing delisted.', data: listing });
 });
 
 export default router;

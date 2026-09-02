@@ -11,26 +11,23 @@ function DeliveryVerificationModal({ isOpen, onClose, foodItem, onPickupSuccess,
 
   const isPickedUp = foodItem.isPickedUp || foodItem.status === 'In-Transit';
 
-  const handleVerifyPickup = (e) => {
+  const handleVerifyPickup = async (e) => {
     e.preventDefault();
     setErrorMsg('');
 
-    // Verification against donor's assigned OTP (or fallback demo OTP 1234 or foodItem.pickupOtp)
-    const expectedOtp = foodItem.pickupOtp || '1234';
-    if (pickupInputOtp === expectedOtp || pickupInputOtp === '1234') {
-      onPickupSuccess(foodItem.id);
-    } else {
-      setErrorMsg(`Invalid Donor OTP! (For demo, use "${expectedOtp}" or "1234")`);
+    try {
+      await onPickupSuccess(foodItem.id, pickupInputOtp);
+    } catch (error) {
+      setErrorMsg(error.message);
     }
   };
 
-  const handleVerifyDropoff = (e) => {
+  const handleVerifyDropoff = async (e) => {
     e.preventDefault();
     setErrorMsg('');
 
-    // Drop-off OTP verification (expected '5678' or foodItem.dropoffOtp)
-    const expectedDropOtp = foodItem.dropoffOtp || '5678';
-    if (dropoffInputOtp === expectedDropOtp || dropoffInputOtp === '5678' || dropoffInputOtp === '1234') {
+    try {
+      await onDeliverySuccess(foodItem.id, dropoffInputOtp);
       try {
         confetti({
           particleCount: 120,
@@ -40,10 +37,9 @@ function DeliveryVerificationModal({ isOpen, onClose, foodItem, onPickupSuccess,
       } catch (err) {
         console.log('Confetti trigger', err);
       }
-      onDeliverySuccess(foodItem.id);
       onClose();
-    } else {
-      setErrorMsg(`Invalid NGO Drop-off OTP! (For demo, use "${expectedDropOtp}")`);
+    } catch (error) {
+      setErrorMsg(error.message);
     }
   };
 

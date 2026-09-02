@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, useMap } from
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Crosshair, Search, MapPin, Navigation, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { io } from 'socket.io-client';
 
 // Fix Default Leaflet Marker Icons
 delete L.Icon.Default.prototype._getIconUrl;
@@ -101,6 +102,42 @@ function MapView({ foodItems = [], currentUser, onClaimFood, activeClaimItem, ra
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [selectedListing, setSelectedListing] = useState(null);
+  const [remoteVolunteerLocation, setRemoteVolunteerLocation] = useState(null);
+
+  useEffect(() => {
+    if (!activeClaimItem?.id) return undefined;
+
+    const socket = io(window.location.origin);
+    const missionId = activeClaimItem.id;
+    socket.emit('join_mission_room', missionId);
+    socket.on('volunteer_position', (position) => {
+      setRemoteVolunteerLocation([position.lat, position.lng]);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [activeClaimItem?.id]);
+
+  useEffect(() => {
+    if (currentUser?.role !== 'Volunteer' || !activeClaimItem?.id || !navigator.geolocation) return undefined;
+
+    const socket = io(window.location.origin);
+    const watchId = navigator.geolocation.watchPosition((position) => {
+      socket.emit('volunteer_location_update', {
+        missionId: activeClaimItem.id,
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        speed: position.coords.speed,
+        heading: position.coords.heading,
+      });
+    }, undefined, { enableHighAccuracy: true, maximumAge: 5000 });
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      socket.disconnect();
+    };
+  }, [activeClaimItem?.id, currentUser?.role]);
 
   // 1. Get accurate location on mount
   const locateUser = () => {
@@ -245,6 +282,17 @@ function MapView({ foodItems = [], currentUser, onClaimFood, activeClaimItem, ra
               />
             )}
           </>
+        )}
+
+        {remoteVolunteerLocation && (
+          <Marker position={remoteVolunteerLocation} icon={createLiveIcon('Volunteer')}>
+            <Popup>
+              <div className="p-1 text-xs">
+                <strong className="text-blue-600">Live Volunteer Location</strong>
+                <p className="text-slate-600">Updated in real time</p>
+              </div>
+            </Popup>
+          </Marker>
         )}
 
         {/* 🏢 Food Listings Markers */}

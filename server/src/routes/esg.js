@@ -11,15 +11,15 @@
  */
 
 import express from 'express';
-import { esgRecords } from '../db.js';
+import { EsgRecord } from '../db.js';
 import { verifyToken } from './auth.js';
 
 const router = express.Router();
 
 // ─── GET /api/esg/my-records ─────────────────────────────────────────────────
 // Returns all ESG certificates issued to the logged-in donor
-router.get('/my-records', verifyToken, (req, res) => {
-  const myRecords = esgRecords.filter((r) => r.donorId === req.user.id);
+router.get('/my-records', verifyToken, async (req, res) => {
+  const myRecords = await EsgRecord.find({ donorId: req.user.id }).sort({ issuedAt: -1 }).lean();
 
   // Calculate cumulative totals
   const totalMeals = myRecords.reduce((acc, r) => acc + (r.mealsCount || 0), 0);
@@ -36,8 +36,8 @@ router.get('/my-records', verifyToken, (req, res) => {
 
 // ─── GET /api/esg/:id ────────────────────────────────────────────────────────
 // Get a specific ESG record (for PDF generation)
-router.get('/:id', verifyToken, (req, res) => {
-  const record = esgRecords.find((r) => r.id === req.params.id);
+router.get('/:id', verifyToken, async (req, res) => {
+  const record = await EsgRecord.findOne({ id: req.params.id }).lean();
 
   if (!record) {
     return res.status(404).json({ success: false, message: 'ESG record not found.' });

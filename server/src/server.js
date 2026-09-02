@@ -25,6 +25,7 @@ import esgRoutes from './routes/esg.js';
 
 // ── Background Jobs ──────────────────────────────────────────
 import { startExpirySweeper } from './expirySweeper.js';
+import { connectDB } from './db.js';
 
 // ── App & Server Setup ───────────────────────────────────────
 const app = express();
@@ -107,10 +108,10 @@ io.on('connection', (socket) => {
 });
 
 // ── Start Automated Expiry Sweeper ───────────────────────────
-startExpirySweeper();
-
-// ── Start Server ─────────────────────────────────────────────
-httpServer.listen(PORT, () => {
+const startServer = async () => {
+  await connectDB();
+  startExpirySweeper();
+  httpServer.listen(PORT, () => {
   console.log('');
   console.log('╔═══════════════════════════════════════════════════╗');
   console.log('║      🍲  FoodRescue Backend Server Running  🍲    ║');
@@ -118,6 +119,12 @@ httpServer.listen(PORT, () => {
   console.log(`║      🔌  Socket.io: ws://localhost:${PORT}          ║`);
   console.log('╚═══════════════════════════════════════════════════╝');
   console.log('');
+  });
+};
+
+startServer().catch((error) => {
+  console.error(`❌ Server startup failed: ${error.message}`);
+  process.exit(1);
 });
 
 export { io };

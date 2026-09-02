@@ -9,7 +9,13 @@ import LoginModal from '../components/LoginModal';
 import DonorDashboard from '../components/DonorDashboard';
 import VolunteerDashboard from '../components/VolunteerDashboard';
 import MapView from '../components/MapView';
-import { createFoodListing, getFoodListings, reserveFoodListing } from '../api';
+import {
+  createFoodListing,
+  getFoodListings,
+  reserveFoodListing,
+  verifyPickupOtp,
+  verifyDropoffOtp,
+} from '../api';
 import { 
   Utensils, 
   MapPin, 
@@ -235,7 +241,9 @@ const Home = () => {
   };
 
   // 2-Tier OTP Handlers
-  const handlePickupSuccess = (foodId) => {
+  const handlePickupSuccess = async (foodId, otp) => {
+    if (!user?.token) throw new Error('Please sign in before verifying pickup.');
+    await verifyPickupOtp({ foodListingId: foodId, otp }, user.token);
     setFoodItems((prev) =>
       prev.map((item) =>
         item.id === foodId
@@ -245,7 +253,9 @@ const Home = () => {
     );
   };
 
-  const handleDeliverySuccess = (foodId) => {
+  const handleDeliverySuccess = async (foodId, otp) => {
+    if (!user?.token) throw new Error('Please sign in before verifying delivery.');
+    await verifyDropoffOtp({ foodListingId: foodId, otp }, user.token);
     setFoodItems((prev) =>
       prev.map((item) =>
         item.id === foodId
@@ -456,6 +466,7 @@ const Home = () => {
               foodItems={filteredFoodItems}
               currentUser={user}
               onClaimFood={handleClaimClick}
+              activeClaimItem={foodItems.find((item) => item.status === 'Claimed')}
               radiusFilter={radiusFilter}
             />
           </section>
