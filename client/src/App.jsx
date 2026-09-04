@@ -1,7 +1,7 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
-import Home from './pages/home';
+import Home from './pages/Home';
 import Dashboard from './pages/Dashboard';
 import { Heart, ShieldCheck, Leaf } from 'lucide-react';
 
